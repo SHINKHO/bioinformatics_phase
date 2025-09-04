@@ -100,7 +100,7 @@ Thumbs.db
 .idea/
 *.sublime-project
 *.sublime-workspace
-
+g
 # 3. Miscellaneous
 # Any local configuration files that shouldn't be shared.
 config.ini
