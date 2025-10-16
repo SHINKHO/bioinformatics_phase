@@ -11,15 +11,17 @@ Genome Analyzer Pipeline은 박테리아 유전체 서열의 분자 역학(Molec
 ## 2. 주요 기능 (Key Features)
 
 - **자동 MLST 분석**: 7-gene MLST 스킴을 기반으로 housekeeping gene을 자동으로 식별하고, allele 번호를 결정하며, 최종 Sequence Type (ST)을 부여합니다.
+- **PathogenFinder2 통합**: 병원체 식별 및 특성화를 위한 PathogenFinder2 분석을 지원하여 병원체 유전체의 종 분류와 위험도 평가를 수행합니다.
 - **동적 종(Species) 식별**: 입력된 유전체의 FASTA 헤더에서 박테리아 종을 지능적으로 감지하여, 해당 종에 적합한 MLST 데이터베이스를 동적으로 선택하여 분석합니다.
+- **지능적인 샘플 ID 추출 (Intelligent Sample ID Extraction)**: 최종 보고서에 파일명 대신 FASTA 헤더의 고유 식별자(e.g., accession number)를 샘플 ID로 사용하여 보고서의 가독성과 명확성을 향상시킵니다.
 - **포괄적인 유전자 탐지**: 다음을 포함한 광범위한 중요 유전자를 식별합니다:
     - 항생제 내성 (AMR, Antimicrobial Resistance) 유전자
     - 플라스미드 복제원 (Plasmid Replicons)
     - 이동성 유전 인자 (MGEs, Mobile Genetic Elements)
 - **고성능 비동기(Asynchronous) 처리**: Python의 `asyncio` 라이브러리를 활용하여 여러 BLAST 분석을 동시에 실행함으로써 총 분석 시간을 크게 단축합니다.
-- **모듈화 및 확장 가능한 아키텍처**: 코드가 기능별 모듈(module)로 명확히 구성되어 있어, 새로운 분석 유형을 추가하거나 기존 로직을 수정하기 용이합니다.
+- **유연한 확장 구조 (Chain of Responsibility)**: "Chain of Responsibility" 디자인 패턴을 채택하여 분석 로직을 모듈화했습니다. 이 구조 덕분에 새로운 분석 유형을 파이프라인의 핵심 로직 수정 없이 깨끗하게 추가할 수 있습니다.
 - **상세 로깅**: 전용 로거(logger)가 각 분석 모듈의 단계별 출력을 캡처하여 디버깅을 용이하게 하고 투명한 감사 추적(audit trail)을 제공합니다. `--verbose` 플래그는 실시간 콘솔 피드백도 제공합니다.
-- **견고한 오류 처리**: 외부 의존성(NCBI BLAST+)을 확인하고, 사용자 안내를 위해 명확하고 유용한 오류 메시지를 제공합니다.
+- **개발자 친화적인 코드베이스**: 소스 코드는 각 함수의 목적과 단계별 로직을 설명하는 구조화된 주석과 문서 문자열(docstring)로 광범위하게 문서화되어 있어, 새로운 기여자가 코드를 이해하고 수정하기 용이합니다.
 
 ---
 
@@ -34,22 +36,30 @@ genome_analyzer/
 │   ├── config.py           #    - 경로 및 분석을 위한 중앙 설정
 │   ├── logger.py           #    - 단계별 디버그 로거
 │   ├── analysis/           #    - 핵심 분석 로직 모듈
-│   │   ├── manager.py      #    - 전체 분석 파이프라인 조율
+│   │   ├── manager.py      #    - 전체 분석 파이프라인 조율 및 핸들러 체인 구성
+│   │   ├── handler/        #    - "Chain of Responsibility" 패턴을 구현한 분석 핸들러 패키지
+│   │   │   ├── __init__.py #    - 핸들러 모듈 초기화
+│   │   │   ├── base.py     #    - 추상 핸들러 클래스 및 컨텍스트
+│   │   │   ├── mlst.py     #    - MLST 분석 핸들러
+│   │   │   ├── standard.py #    - 표준 BLAST 분석 핸들러
+│   │   │   └── pathogen_finder.py # - PathogenFinder2 분석 핸들러
 │   │   ├── blast_runner.py #    - BLAST 커맨드를 비동기적으로 실행
+│   │   ├── pathogen_runner.py #    - PathogenFinder2 커맨드를 비동기적으로 실행
 │   │   └── utils.py        #    - 헬퍼 함수 (e.g., 의존성 체크, 종 식별)
 │   └── reporting/          #    - 리포트 생성 모듈
 │       └── reporter.py     #    - 결과를 최종 텍스트 리포트로 컴파일
 │
 ├── database/               # 2. 모든 분석 데이터베이스의 루트 디렉토리
-│   ├── MLST_DB/            #    - MLST 스킴 (종별로 하위 폴더 구성)
-│   │   └── klebsiella/
-│   ├── resfinder_db/       #    - 항생제 내성 유전자
-│   ├── plasmidfinder_db/   #    - 플라스미드 복제원 서열
-│   └── mefinder_db/        #    - 이동성 유전 인자
+│   ├── MLST_DB/            #    - 종별 MLST 데이터베이스
+│   ├── resfinder_db/       #    - 항생제 내성 유전자 데이터베이스
+│   ├── plasmidfinder_db/   #    - 플라스미드 복제원 데이터베이스
+│   ├── mefinder_db/        #    - 이동성 유전 인자 데이터베이스
+│   └── Pathogenfinder/     #    - PathogenFinder2 데이터베이스
+│       ├── configs/        #    - PathogenFinder2 설정 파일
+│       └── PathogenFinder2_dataset/ #    - PathogenFinder2 학습 데이터셋
 │
 ├── genome/                 # 3. 입력 유전체 파일 위치
-│   └── GCF_000523395.1.fna
-│
+│   └── ...
 ├── analysis_results/       # 4. 리포트 및 결과물의 기본 출력 디렉토리
 │
 └── logs/                   # 5. 디버깅 및 감사 추적을 위한 상세 로그
@@ -57,58 +67,99 @@ genome_analyzer/
 
 ---
 
-## 4. 코드 로직 및 모듈 설명
+## 4. 출력 구조 (Output Structure)
 
-파이프라인의 로직은 모듈식이며, 각 컴포넌트가 워크플로우의 특정 부분을 담당합니다.
+파이프라인은 `analysis_results`, `logs`, `blast_db_output` 디렉토리에 결과를 생성합니다. 모든 출력은 입력 유전체의 ID와 종(species)에 따라 체계적으로 구성됩니다.
 
-- **`main.py` (Entry Point)**
-  - `argparse`를 사용하여 커맨드 라인 인터페이스(`genome_file`, `--output`, `--verbose`)를 정의합니다.
-  - 제공된 인자로 `AnalysisManager`를 인스턴스화합니다.
-  - `asyncio.run()`을 사용하여 비동기 파이프라인을 시작합니다.
+예를 들어, `genome/test_id/klebsiella/A0018KP0093.fasta`를 입력으로 사용할 경우, 출력은 다음과 같이 생성됩니다:
 
-- **`config.py` (Central Configuration)**
-  - `DATABASE_ROOT`, `DEFAULT_RESULTS_DIR`와 같은 핵심 경로를 정의합니다.
-  - 파이프라인의 **컨트롤 센터** 역할을 하는 `ANALYSES_TO_RUN` 딕셔너리를 포함합니다. 이 딕셔너리는 데이터베이스 폴더와 분석 이름을 매핑하여, 파이프라인이 데이터 기반으로 동작하고 쉽게 확장될 수 있도록 합니다.
+```
+analysis_results/
+└── test_id/
+    └── klebsiella/
+        ├── Antimicrobial_Resistance/
+        │   ├── blast_results.tsv
+        │   └── combined_query.fasta
+        ├── Mobile_Genetic_Elements/
+        │   ├── blast_results.tsv
+        │   └── combined_query.fasta
+        ├── MLST/
+        │   └── mlst_results.json  # <-- MLST 결과 (JSON 형식)
+        ├── Plasmid_Replicons/
+        │   ├── blast_results.tsv
+        │   └── combined_query.fasta
+        └── Final_ME_Report.txt      # <-- 최종 요약 보고서
 
-- **`analysis/manager.py` (The Orchestrator)**
-  - `AnalysisManager` 클래스는 전체 워크플로우를 총괄합니다. `run_pipeline` 메소드는 다음 순서로 작업을 실행합니다:
-    1.  **Setup**: 출력 디렉토리를 생성하고 `utils.check_dependencies()`를 통해 사전 검사를 수행합니다.
-    2.  **Genome DB Creation**: 효율적인 검색을 위해 입력 유전체 파일로부터 로컬 BLAST 데이터베이스를 생성합니다.
-    3.  **Species Identification**: `utils.setup_mlst_parameters()`를 호출하여 종(species)을 결정하고 MLST 관련 데이터를 준비합니다.
-    4.  **Concurrent Analysis**: 핵심 성능 기능입니다. MLST 워크플로우와 `config.py`에 정의된 다른 모든 분석을 위한 `asyncio` task 목록을 생성합니다. `asyncio.gather()`는 BLAST 위주의 모든 task를 동시에 실행합니다.
-    5.  **Reporting**: 모든 분석이 완료되면 `reporter.create_final_report()`를 호출하여 요약 리포트를 생성합니다.
-    6.  **Cleanup**: 분석 중 사용된 임시 디렉토리를 제거합니다.
+logs/
+└── test_id/
+    └── klebsiella/
+        ├── 2025-10-16_Pipeline_1_Pre-flight_Checks_1.log
+        ├── 2025-10-16_MLST_1_Start_MLST_Workflow_1.log
+        └── ... (각 단계별 상세 로그)
 
-- **`analysis/blast_runner.py` (The Asynchronous Worker)**
-  - NCBI BLAST+ 커맨드 라인 툴(`makeblastdb`, `blastn`)에 대한 비동기 래퍼(wrapper)를 제공합니다.
-  - `asyncio.create_subprocess_exec`를 사용하여 셸 커맨드를 non-blocking 방식으로 실행하고, `stdout`과 `stderr`를 캡처하여 견고한 오류 처리를 구현합니다. 이를 통해 여러 개의 긴 BLAST 작업을 병렬로 실행할 수 있습니다.
+blast_db_output/
+└── test_id/
+    └── klebsiella/
+        ├── A0018KP0093.nhr
+        ├── A0018KP0093.nin
+        └── A0018KP0093.nsq
+```
 
-- **`analysis/utils.py` (Helper Functions)**
-  - `check_dependencies()`: 필수 BLAST 툴들이 시스템의 PATH에 설치되어 있는지 확인합니다.
-  - `setup_mlst_parameters()`: 입력 FASTA 헤더를 읽어 종(e.g., "klebsiella")을 자동으로 식별하는 핵심 함수입니다. 이후 해당 MLST 데이터베이스 디렉토리와 프로파일 파일을 동적으로 찾아 파이프라인이 다른 유기체에도 적용될 수 있도록 합니다.
+### 주요 출력 파일 설명
 
-- **`reporting/reporter.py` (The Scribe)**
-  - `AnalysisManager`가 수집한 구조화된 Python 딕셔너리 형태의 결과를 입력받습니다.
-  - 각 분석의 BLAST 결과 파일(`.tsv`)을 파싱합니다.
-  - ST, allele profile, AMR 유전자, plasmid replicon 등 모든 정보를 사람이 읽기 쉬운 `Final_ME_Report.txt` 파일로 포맷팅합니다.
-
-- **`logger.py` (The Archivist)**
-  - `logs/` 디렉토리에 상세한 단계별 로그 파일을 기록하는 `Logger` 클래스를 제공합니다.
-  - 각 로그 파일은 `2025-10-14_MLST_4_Extracted_Genes_Content_1.fasta`와 같이 체계적인 이름으로 저장되어, 중간 데이터와 커맨드 출력을 명확하게 추적할 수 있게 해주므로 디버깅에 매우 유용합니다.
+-   **`analysis_results/{id}/{species}/Final_ME_Report.txt`**: 모든 분석 결과를 요약한 최종 텍스트 보고서입니다.
+-   **`analysis_results/{id}/{species}/{analysis_name}/blast_results.tsv`**: 각 표준 분석에 대한 원시 BLAST 결과를 담고 있는 TSV 파일입니다.
+-   **`analysis_results/{id}/{species}/MLST/mlst_results.json`**: MLST 분석 결과를 담고 있는 JSON 파일입니다. `tseemann/mlst`와 유사한 형식으로 ST, scheme, allele 프로파일을 포함합니다.
+-   **`logs/{id}/{species}/`**: 파이프라인의 모든 단계에 대한 상세 로그 파일이 저장되는 디렉토리입니다. 디버깅에 유용합니다.
+-   **`blast_db_output/{id}/{species}/`**: 입력 유전체로부터 생성된 BLAST 데이터베이스 파일들이 저장됩니다.
 
 ---
 
-## 5. 시스템 요구사항 (System Requirements)
+## 5. 코드 로직 및 모듈 설명
+
+파이프라인의 핵심 로직은 "Chain of Responsibility" 디자인 패턴을 중심으로 구축되어, 각 모듈이 명확한 책임을 갖습니다.
+
+- **`analysis/manager.py` (The Orchestrator)**
+  - `AnalysisManager` 클래스는 전체 워크플로우를 총괄하는 오케스트레이터입니다.
+  - `run_pipeline` 메소드는 파이프라인의 모든 단계를 순서대로 실행합니다: (1) 환경 설정, (2) BLAST DB 생성, (3) 분석 실행, (4) 리포팅, (5) 임시 파일 정리.
+  - 가장 중요한 역할은 `analysis/handler/`에 정의된 **핸들러(handler)들을 조립하여 "책임 연쇄(Chain of Responsibility)"를 구성**하는 것입니다. 그 후, `config.py`에 명시된 모든 분석 요청을 체인의 첫 번째 핸들러에게 전달합니다.
+
+- **`analysis/handler/` (The Handler Package)**
+  - 이 패키지는 "Chain of Responsibility" 디자인 패턴을 구현하여 파이프라인의 유연성을 책임지는 핵심부입니다. 각 분석 유형은 별도의 핸들러 모듈로 분리되어 있습니다.
+  - **동작 원리**: 분석 요청이 들어오면, 체인의 첫 번째 핸들러(e.g., `MLSTHandler`)가 요청을 확인합니다. 자신이 처리할 수 있는 요청이면 분석을 수행하고, 그렇지 않으면 다음 핸들러에게 요청을 그대로 전달합니다.
+  - **주요 구성 요소**:
+    - `handler/base.py`: 모든 핸들러가 공유하는 `AnalysisContext` 데이터 클래스와, 모든 핸들러가 상속해야 하는 추상 베이스 클래스 `AnalysisHandler`를 정의합니다.
+    - `handler/mlst.py`: 복잡한 다단계 워크플로우를 가진 "특별(special)" MLST 분석을 처리하는 `MLSTHandler`를 포함합니다.
+    - `handler/pathogen_finder.py`: PathogenFinder2 분석을 위한 `PathogenFinder2Handler`를 포함합니다.
+    - `handler/standard.py`: 체인의 마지막에 위치하며, 간단한 단일 BLAST 검색으로 처리할 수 있는 모든 "표준(standard)" 분석을 담당하는 `StandardAnalysisHandler`를 포함합니다.
+
+- **`analysis/blast_runner.py` (The Asynchronous Worker)**
+  - `makeblastdb`, `blastn`과 같은 NCBI BLAST+ 커맨드 라인 툴에 대한 비동기 래퍼(wrapper)를 제공합니다.
+  - `asyncio.create_subprocess_exec`를 사용하여 여러 BLAST 작업을 병렬로 처리함으로써 파이프라인의 성능을 극대화합니다.
+
+- **`config.py` (Central Configuration)**
+  - `ANALYSES_TO_RUN` 딕셔너리는 파이프라인이 수행할 분석 목록을 정의하는 **컨트롤 센터**입니다. `manager`는 이 딕셔너리를 읽어 각 분석을 핸들러 체인에 전달합니다.
+
+- **`utils.py`, `main.py`, `reporting.py`, `logger.py`**
+  - 이 모듈들은 각각 의존성 확인 및 파라미터 준비(`utils`), CLI 인터페이스(`main`), 최종 리포트 생성(`reporting`), 상세 로그 기록(`logger`) 등 명확히 분리된 보조 기능을 수행합니다.
+
+---
+
+## 6. 시스템 요구사항 (System Requirements)
 
 - **Python**: 3.9 이상
 - **NCBI BLAST+ Suite**: `blastn`, `makeblastdb`, `blastdbcmd`가 설치되어 시스템의 PATH에서 접근 가능해야 합니다.
+- **PathogenFinder2 Dependencies**:
+  - `prodigal`: 유전체 예측 도구
+  - `protT5`: 단백질 임베딩 도구
+  - `diamond`: 고성능 단백질 비교 도구
 - **Python Libraries**:
   - `pandas`
   - `biopython`
 
 ---
 
-## 6. 설치 및 설정 (Installation and Setup)
+## 7. 설치 및 설정 (Installation and Setup)
 
 **1. Repository 클론**
 ```bash
@@ -121,7 +172,17 @@ cd genome_analyzer
 pip install pandas biopython
 ```
 
-**3. 데이터베이스 설정**
+**3. 의존성 설치 확인**
+파이프라인 실행 전에 모든 의존성이 설치되어 있는지 확인합니다:
+```bash
+# BLAST+ 도구 확인
+which blastn makeblastdb blastdbcmd
+
+# PathogenFinder2 도구 확인
+which prodigal protT5 diamond
+```
+
+**4. 데이터베이스 설정**
 프로젝트 루트에 `database` 디렉토리를 생성합니다. 내부에 다음 구조에 따라 필요한 데이터베이스 파일을 배치합니다. MLST 데이터베이스는 **반드시** 종의 이름을 딴 하위 디렉토리(e.g., `klebsiella`)를 가져야 합니다.
 
 ```
@@ -138,142 +199,276 @@ database/
 ├── plasmidfinder_db/       # PlasmidFinder 데이터베이스 파일 (*.fsa)
 │   └── enterobacteriales.fsa
 │
-└── mefinder_db/            # MGE 데이터베이스 파일 (*.fasta)
-    └── MGEdb_cds.fasta
+├── mefinder_db/            # MGE 데이터베이스 파일 (*.fasta)
+│   └── MGEdb_cds.fasta
+│
+└── Pathogenfinder/         # PathogenFinder2 데이터베이스
+    ├── configs/            # PathogenFinder2 설정 파일
+    │   ├── config_empty.json
+    │   └── config_train.json
+    └── PathogenFinder2_dataset/ # PathogenFinder2 학습 데이터셋
+        └── ...
+```
+
+**5. PathogenFinder2 데이터베이스 설정**
+PathogenFinder2를 사용하려면 다음과 같이 데이터베이스를 설정해야 합니다:
+
+```bash
+# PathogenFinder2 데이터베이스 다운로드
+cd database/Pathogenfinder
+# PathogenFinder2 공식 저장소에서 최신 데이터셋을 다운로드합니다
+# (https://github.com/genomicepidemiology/PathogenFinder2)
+
+# 데이터베이스 구조 확인
+ls -la PathogenFinder2_dataset/
+```
+
+**6. 의존성 검증**
+설치가 완료되었는지 확인합니다:
+```bash
+python -c "from src.analysis.utils import check_dependencies; check_dependencies()"
 ```
 
 ---
 
-## 7. 사용 예제 (Usage Examples)
+## 8. PathogenFinder2 통합 (PathogenFinder2 Integration)
 
-파이프라인은 `src/main.py`를 통해 실행됩니다.
+PathogenFinder2는 병원체 유전체의 종 분류와 위험도 평가를 위한 고급 분석 도구입니다. 이 통합을 통해 파이프라인은 병원체 식별, 특성화, 위험도 평가를 자동화할 수 있습니다.
 
-**1. 도움말 정보 보기**
-```bash
-python src/main.py --help
-```
+### 작동 원리
 
-**2. 기본 실행**
-유전체 파일에 대한 분석을 실행합니다. 결과는 기본 `analysis_results/` 디렉토리에 저장됩니다.
+PathogenFinder2는 다음과 같은 단계로 작동합니다:
 
-```bash
-python src/main.py path/to/your/genome.fna
-```
+1. **의존성 확인**: `prodigal`, `protT5`, `diamond` 도구의 설치 여부를 확인합니다
+2. **환경 설정**: 입력 유전체 경로와 출력 디렉토리를 포함한 설정 파일을 생성합니다
+3. **실행**: PathogenFinder2를 실행하여 병원체 분석을 수행합니다
+4. **결과 검증**: 생성된 결과 파일의 유효성을 검증하고 파싱합니다
+5. **정리**: 임시 파일을 정리합니다
 
-**3. 고급 실행**
-사용자 지정 출력 디렉토리(`-o`)를 지정하고, 콘솔에 상세 로깅을 활성화(`-v`)합니다.
+### 출력 형식 및 해석
 
-```bash
-python src/main.py path/to/your/genome.fna -o custom_results -v
-```
+PathogenFinder2는 다음과 같은 출력 파일을 생성합니다:
+
+- **`pathogenfinder_results.tsv`**: 상세한 분석 결과 (TSV 형식)
+- **`pathogenfinder_summary.txt`**: 요약 정보 및 위험도 평가
+
+주요 결과 항목:
+- **Pathogen Identification**: 병원체 종 식별 결과
+- **Risk Assessment**: 위험도 등급 (High, Medium, Low)
+- **Confidence Score**: 분신도 점수 (0-1)
+- **Supporting Evidence**: 분석 근거 정보
+
+### 문제 해결 (Troubleshooting)
+
+**일반적인 문제 및 해결 방법:**
+
+1. **의존성 오류**:
+   ```
+   Error: Missing PathogenFinder2 dependencies: prodigal, protT5, diamond
+   ```
+   **해결**: 모든 의존성이 설치되어 있는지 확인하고 PATH에 등록합니다
+
+2. **데이터베이스 오류**:
+   ```
+   Error: PathogenFinder2 database not found
+   ```
+   **해결**: `database/Pathogenfinder/PathogenFinder2_dataset/` 디렉토리에 데이터베이스가 있는지 확인합니다
+
+3. **메모리 부족**:
+   ```
+   Error: Out of memory during PathogenFinder2 execution
+   ```
+   **해결**: `-t` 옵션으로 스레드 수를 줄여 실행합니다 (예: `-t 2`)
+
+4. **결과 파일 누락**:
+   ```
+   Error: Missing expected output files
+   ```
+   **해결**: 실행이 정상적으로 완료되었는지 확인하고, 출력 디렉토리 권한을 확인합니다
+
+**디버깅 팁:**
+- `--verbose` 플래그를 사용하여 상세한 로그를 확인합니다
+- `logs/` 디렉토리에서 PathogenFinder2 관련 로그를 분석합니다
+- 임시 디렉토리에 생성된 설정 파일을 검증합니다
 
 ---
 
-## 8. 출력 설명 (Output Description)
+## 9. 확장 가이드: 표준 분석 추가 (Expansion Guide: Standard Analysis)
 
-완료 시 파이프라인은 지정된 출력 디렉토리에 다음을 생성합니다:
-
-- **`Final_ME_Report.txt`**: MLST, AMR 유전자, MGE를 포함한 모든 분석 결과의 통합된, 사람이 읽기 쉬운 요약 리포트입니다.
-- **분석별 폴더**: 각 분석을 위한 디렉토리(e.g., `Antimicrobial_Resistance/`, `Plasmid_Replicons/`)로, 원시 BLAST 결과(`blast_results.tsv`)와 검색에 사용된 쿼리 파일을 포함합니다.
-- **`logs/` 디렉토리**: 프로젝트 루트에 위치하며, 각 단계의 상세 로그를 포함하여 문제 해결이나 분석 과정 감사에 유용합니다.
-
----
-
-## 9. 확장 가이드 (Expansion Guide)
-
-모듈식 설계 덕분에 새로운 BLAST 기반 분석을 추가하는 것은 매우 간단합니다.
+단일 BLAST 검색으로 구성된 "표준" 분석을 추가하는 것은 `config.py` 파일을 수정하는 것만으로 매우 간단하게 완료할 수 있습니다.
 
 **1단계: 데이터베이스 추가**
 새로운 FASTA 데이터베이스 파일을 `database/` 디렉토리 안의 전용 폴더에 배치합니다.
-```
-database/
-└── virulence_db/           # 새로운 데이터베이스 폴더
-    └── vfdb_core.fasta
-```
 
-**2단계: 설정 업데이트**
-`src/config.py`를 열고 `ANALYSES_TO_RUN` 딕셔너리에 새 항목을 추가합니다. `key`는 데이터베이스 폴더 이름이고, `value`는 출력 폴더 및 리포트 섹션에 사용할 이름입니다.
+**2단계: `config.py` 설정 업데이트**
+`src/config.py`를 열고 `ANALYSES_TO_RUN` 딕셔너리에 새 항목을 추가합니다.
 
 ```python
 # in src/config.py
 ANALYSES_TO_RUN = {
     "MLST_DB": "MLST",
-    "resfinder_db": "Antimicrobial_Resistance",
-    "plasmidfinder_db": "Plasmid_Replicons",
-    "mefinder_db": "Mobile_Genetic_Elements",
     "virulence_db": "Virulence_Factors", # <-- 여기에 새 분석을 추가
+    ...
 }
 ```
-
-이제 모든 준비가 끝났습니다. `AnalysisManager`는 새 항목을 자동으로 감지하여 다른 분석과 동시에 실행하며, `reporter`는 최종 리포트에 해당 결과를 포함시킵니다. 다른 코드를 변경할 필요가 없습니다.
+이제 모든 준비가 끝났습니다. 파이프라인을 실행하면 `StandardAnalysisHandler`가 이 새로운 요청을 자동으로 감지하여 처리합니다.
 
 ---
 
-## 10. 특별 분석 프로세스 추가하기 (Adding a Special Analysis Process)
+## 10. 확장 가이드: 특별 분석 추가 (Expansion Guide: Special Analysis)
 
-9번 가이드에서 설명한 "표준(Standard)" 분석 추가 방법 외에도, 파이프라인은 MLST와 같이 여러 단계의 복잡한 로직을 갖는 "특별(Special)" 분석을 추가할 수 있도록 설계되었습니다. MLST가 바로 그 예시입니다.
+"Chain of Responsibility" 패턴 덕분에, MLST와 PathogenFinder2와 같이 여러 단계의 복잡한 로직을 갖는 "특별" 분석을 추가하는 과정 또한 매우 체계적입니다.
 
-현재 아키텍처에서 새로운 특별 분석(예: Serotyping)을 추가하는 방법은 다음과 같습니다.
+**PathogenFinder2Handler 예시:**
+
+PathogenFinder2Handler는 표준 BLAST 분석과 다르게 다음과 같은 특징을 가집니다:
+
+- **다단계 워크플로우**: 의존성 확인 → 설정 → 실행 → 검증 → 정리의 단계를 거칩니다
+- **복잡한 의존성 관리**: `prodigal`, `protT5`, `diamond` 등 외부 도구를 관리합니다
+- **출력 검증**: 생성된 결과 파일의 유효성을 검증합니다
+- **에러 처리**: 각 단계에서 발생할 수 있는 오류를 체계적으로 처리합니다
 
 **1단계: `config.py`에 분석 정의**
 
-먼저 `src/config.py`의 `ANALYSES_TO_RUN` 딕셔너리에 새로운 분석을 추가합니다. 이 과정은 표준 분석을 추가할 때와 동일합니다.
+표준 분석과 마찬가지로 `src/config.py`의 `ANALYSES_TO_RUN` 딕셔너리에 새로운 분석을 추가합니다.
 
 ```python
 # in src/config.py
 ANALYSES_TO_RUN = {
     "MLST_DB": "MLST",
+    "Pathogenfinder": "Pathogen_Finder2",  # PathogenFinder2 분석
     "serotype_db": "Serotyping", # <-- 새로운 특별 분석 추가
     ...
 }
 ```
 
-**2단계: `AnalysisManager`에 전용 워크플로우 메소드 생성**
+**2단계: `analysis/handler/` 패키지에 전용 핸들러 모듈 생성**
 
-`src/analysis/manager.py`의 `AnalysisManager` 클래스 내에, 새로운 특별 분석을 위한 전용 `async` 메소드를 작성합니다. 이 메소드는 `_run_mlst_workflow`를 모델로 삼아, 해당 분석에 필요한 모든 커스텀 로직(예: 여러 BLAST 실행, 결과 파싱, 외부 툴 호출 등)을 포함해야 합니다.
+`src/analysis/handler/` 패키지 안에, 새로운 특별 분석을 위한 전용 핸들러 모듈(e.g., `serotyping.py`)을 작성합니다. 이 모듈의 클래스는 `AnalysisHandler`를 상속받아야 하며, `handle` 메소드 내에서 자신의 분석 이름(예: "Serotyping")을 확인하고, 일치할 경우 커스텀 워크플로우를 실행해야 합니다. `handler/mlst.py`의 `MLSTHandler`나 `handler/pathogen_finder.py`의 `PathogenFinder2Handler`를 템플릿으로 사용할 수 있습니다.
 
 ```python
-# in src/analysis/manager.py
+# in src/analysis/handler/serotyping.py
 
-class AnalysisManager:
-    # ... 기존 코드 ...
+from .base import AnalysisHandler
+import asyncio
 
-    async def _run_mlst_workflow(self, genome_db_path: Path, mlst_params: dict):
-        # ... MLST 로직 ...
+class SerotypingHandler(AnalysisHandler):
+    async def handle(self, analysis_name: str, db_folder: str, params: dict) -> asyncio.Task | None:
+        if analysis_name == "Serotyping":
+            return asyncio.create_task(self._run_serotyping_workflow(params))
+        else:
+            return await super().handle(analysis_name, db_folder, params)
 
-    # --- 새로운 특별 분석 메소드 추가 --- 
-    async def _run_serotyping_workflow(self, genome_db_path: Path, serotype_params: dict):
-        self._log("Starting Serotyping workflow...")
-        # 1. Serotyping에 필요한 첫 BLAST 실행
-        # 2. 결과 파싱
-        # 3. 파싱된 결과를 바탕으로 두 번째 BLAST 또는 다른 로직 수행
-        # 4. 최종 결과를 self.results_data에 저장
-        self.results_data['serotype'] = { "Type": "ST1a" } # 예시 결과
-        self._log("Serotyping workflow completed.")
+    async def _run_serotyping_workflow(self, params: dict):
+        # Serotyping 워크플로우 구현
+        ...
 ```
 
-**3단계: `run_pipeline` 로직에 새 워크플로우 연결**
+**3단계: `AnalysisManager`에서 핸들러 체인에 연결**
 
-마지막으로, `AnalysisManager`의 `run_pipeline` 메소드 안에서 `ANALYSES_TO_RUN`을 순회하는 메인 루프를 찾아, 새로운 분석을 호출하는 `elif` 구문을 추가합니다.
+마지막으로, `src/analysis/manager.py`의 `run_pipeline` 메소드에서 새로 만든 핸들러를 체인에 연결합니다. `StandardAnalysisHandler`는 항상 체인의 가장 마지막에 위치해야 합니다.
 
 ```python
 # in run_pipeline() method of AnalysisManager
 
-        tasks = []
-        for db_folder, analysis_name in ANALYSES_TO_RUN.items():
-            if analysis_name == "MLST":
-                tasks.append(self._run_mlst_workflow(genome_db_path, mlst_params))
+            # Build the chain of responsibility
+            standard_handler = StandardAnalysisHandler(context)
+            pathogen_handler = PathogenFinder2Handler(context) # <-- PathogenFinder2 핸들러
+            mlst_handler = MLSTHandler(context)
+            analysis_chain = mlst_handler
 
-            # --- 여기에 새로운 elif 구문 추가 ---
-            elif analysis_name == "Serotyping":
-                # serotype_params = utils.setup_serotype_parameters(...) # 필요 시 파라미터 준비
-                tasks.append(self._run_serotyping_workflow(genome_db_path, {}))
-            # -------------------------------------
-
-            else:
-                tasks.append(self._run_other_analysis(db_folder, analysis_name, genome_db_path))
-        
-        await asyncio.gather(*tasks)
+            # 체인 연결: MLST -> PathogenFinder2 -> Standard
+            analysis_chain.set_next(pathogen_handler).set_next(standard_handler)
 ```
 
-이 3단계를 통해, 현재 아키텍처 내에서 단순한 BLAST 검색 이상의 복잡한 로직을 가진 새로운 분석 파이프라인을 효과적으로 추가하고 관리할 수 있습니다.
+**특별 분석 vs 표준 분석:**
+
+| 특징 | 표준 분석 (StandardAnalysisHandler) | 특별 분석 (PathogenFinder2Handler 등) |
+|------|-----------------------------------|-----------------------------------|
+| **워크플로우** | 단일 BLAST 검색 | 다단계 복합 워크플로우 |
+| **의존성** | BLAST+만 필요 | 여러 외부 도구 필요 |
+| **출력 처리** | 단순 결과 저장 | 결과 검증 및 파싱 |
+| **에러 처리** | 기본 에러 처리 | 상세한 에러 처리 및 복구 |
+| **확장성** | 간단한 추가 | 복잡한 로직 구현 필요 |
+
+이 3단계를 통해, 파이프라인의 핵심 로직을 수정하지 않고도 새로운 특별 분석을 깨끗하고 모듈화된 방식으로 추가할 수 있습니다.
+
+---
+
+## 11. 설정 예시 (Configuration Examples)
+
+**PathogenFinder2 설정 예시:**
+
+**1. `ANALYSES_TO_RUN` 설정:**
+
+```python
+# in src/config.py
+ANALYSES_TO_RUN = {
+    # 특별 분석
+    "MLST_DB": "MLST",
+    "Pathogenfinder": "Pathogen_Finder2",  # PathogenFinder2 활성화
+    
+    # 표준 분석
+    "resfinder_db": "Antimicrobial_Resistance",
+    "plasmidfinder_db": "Plasmid_Replicons",
+    "mefinder_db": "Mobile_Genetic_Elements",
+}
+```
+
+**2. 데이터베이스 설정 예시:**
+
+```bash
+# 데이터베이스 디렉토리 구조
+database/
+├── Pathogenfinder/
+│   ├── configs/
+│   │   ├── config_empty.json    # 기본 설정 파일
+│   │   └── config_train.json    # 학습용 설정 파일
+│   └── PathogenFinder2_dataset/ # 학습 데이터셋
+│       ├── bacteria.faa         # 박테리아 단백질 데이터
+│       ├── virus.faa            # 바이러스 단백질 데이터
+│       └── fungi.faa            # 곰팡이 단백질 데이터
+```
+
+**3. 실행 예시:**
+
+```bash
+# PathogenFinder2를 포함한 전체 분석 실행
+python src/main.py -g genome/sample.fasta -v
+
+# 특정 분석만 실행 (PathogenFinder2 제외)
+python src/main.py -g genome/sample.fasta -v --analyses MLST,Antimicrobial_Resistance
+
+# PathogenFinder2만 실행
+python src/main.py -g genome/sample.fasta -v --analyses Pathogen_Finder2
+```
+
+**4. 출력 디렉토리 구조:**
+
+```bash
+analysis_results/
+├── MLST/
+│   └── ... (MLST 결과)
+├── Pathogen_Finder2/
+│   ├── config.json              # PathogenFinder2 설정 파일
+│   ├── pathogenfinder_results.tsv  # 상세 결과
+│   ├── pathogenfinder_summary.txt  # 요약 정보
+│   └── logs/                    # 분석 로그
+├── Antimicrobial_Resistance/
+│   └── ... (항생제 내성 결과)
+└── ...
+```
+
+**5. 설정 파일 예시 (`config.json`):**
+
+```json
+{
+  "input_genome": "/path/to/genome/sample.fasta",
+  "output_dir": "/path/to/analysis_results/Pathogen_Finder2",
+  "database_dir": "/path/to/database/Pathogenfinder",
+  "threads": 4,
+  "evalue_threshold": 1e-5
+}
+```
+
+이 설정 예시들은 PathogenFinder2 통합을 위한 기본적인 구성을 보여줍니다. 실제 사용 시에는 데이터베이스 구조와 환경에 맞게 설정을 조정해야 합니다.

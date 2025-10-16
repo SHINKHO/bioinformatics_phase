@@ -1,11 +1,11 @@
 """
-Asynchronous BLAST Command Wrappers
+Asynchronous Pathogen Finder2 Command Wrappers
 
-This module provides high-level asynchronous wrappers for common NCBI BLAST+
+This module provides high-level asynchronous wrappers for common genomicepidemiology/PathogenFinder2
 command-line tools. It uses `asyncio.create_subprocess_exec` for robust and
 efficient execution of external bioinformatics tools like `blastn` and `makeblastdb`.
 
-This approach allows multiple BLAST jobs to run concurrently, significantly
+This approach allows multiple PathogenFinder setup to process running concurrently, significantly
 speeding up the pipeline.
 """
 import asyncio
