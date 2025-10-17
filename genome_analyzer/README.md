@@ -41,6 +41,7 @@ genome_analyzer/
 │   │   │   ├── __init__.py #    - 핸들러 모듈 초기화
 │   │   │   ├── base.py     #    - 추상 핸들러 클래스 및 컨텍스트
 │   │   │   ├── mlst.py     #    - MLST 분석 핸들러
+│   │   │   ├── amr.py      #    - 항생제 내성(AMR) 분석 핸들러
 │   │   │   ├── standard.py #    - 표준 BLAST 분석 핸들러
 │   │   │   └── pathogen_finder.py # - PathogenFinder2 분석 핸들러
 │   │   ├── blast_runner.py #    - BLAST 커맨드를 비동기적으로 실행
@@ -122,7 +123,7 @@ blast_db_output/
 - **`analysis/manager.py` (The Orchestrator)**
   - `AnalysisManager` 클래스는 전체 워크플로우를 총괄하는 오케스트레이터입니다.
   - `run_pipeline` 메소드는 파이프라인의 모든 단계를 순서대로 실행합니다: (1) 환경 설정, (2) BLAST DB 생성, (3) 분석 실행, (4) 리포팅, (5) 임시 파일 정리.
-  - 가장 중요한 역할은 `analysis/handler/`에 정의된 **핸들러(handler)들을 조립하여 "책임 연쇄(Chain of Responsibility)"를 구성**하는 것입니다. 그 후, `config.py`에 명시된 모든 분석 요청을 체인의 첫 번째 핸들러에게 전달합니다.
+  - 가장 중요한 역할은 `analysis/handler/`에 정의된 **핸들러(handler)들을 조립하여 "책임 연쇄(Chain of Responsibility)"를 구성**하는 것입니다. `MLSTHandler`, `AMRHandler`, `PathogenFinder2Handler`, `StandardAnalysisHandler`를 순서대로 연결하여 체인을 만듭니다. 그 후, `config.py`에 명시된 모든 분석 요청을 체인의 첫 번째 핸들러에게 전달합니다.
 
 - **`analysis/handler/` (The Handler Package)**
   - 이 패키지는 "Chain of Responsibility" 디자인 패턴을 구현하여 파이프라인의 유연성을 책임지는 핵심부입니다. 각 분석 유형은 별도의 핸들러 모듈로 분리되어 있습니다.
@@ -130,8 +131,9 @@ blast_db_output/
   - **주요 구성 요소**:
     - `handler/base.py`: 모든 핸들러가 공유하는 `AnalysisContext` 데이터 클래스와, 모든 핸들러가 상속해야 하는 추상 베이스 클래스 `AnalysisHandler`를 정의합니다.
     - `handler/mlst.py`: 복잡한 다단계 워크플로우를 가진 "특별(special)" MLST 분석을 처리하는 `MLSTHandler`를 포함합니다.
+    - `handler/amr.py`: ABRicate와 유사하게 BLAST 결과를 파싱하고 요약하여 항생제 내성(AMR) 유전자를 식별하는 `AMRHandler`를 포함합니다.
     - `handler/pathogen_finder.py`: PathogenFinder2 분석을 위한 `PathogenFinder2Handler`를 포함합니다.
-    - `handler/standard.py`: 체인의 마지막에 위치하며, 간단한 단일 BLAST 검색으로 처리할 수 있는 모든 "표준(standard)" 분석을 담당하는 `StandardAnalysisHandler`를 포함합니다.
+    - `handler/standard.py`: 체인의 마지막에 위치하며, 간단한 단일 BLAST 검색으로 처리할 수 있는 모든 "표준(standard)" 분석(e.g., Plasmid Replicons, MGEs)을 담당하는 `StandardAnalysisHandler`를 포함합니다.
 
 - **`analysis/blast_runner.py` (The Asynchronous Worker)**
   - `makeblastdb`, `blastn`과 같은 NCBI BLAST+ 커맨드 라인 툴에 대한 비동기 래퍼(wrapper)를 제공합니다.
@@ -295,7 +297,7 @@ PathogenFinder2는 다음과 같은 출력 파일을 생성합니다:
 
 ## 9. 확장 가이드: 표준 분석 추가 (Expansion Guide: Standard Analysis)
 
-단일 BLAST 검색으로 구성된 "표준" 분석을 추가하는 것은 `config.py` 파일을 수정하는 것만으로 매우 간단하게 완료할 수 있습니다.
+단일 BLAST 검색으로 구성된 "표준" 분석(e.g., 새로운 Virulence Factor 데이터베이스)을 추가하는 것은 `config.py` 파일을 수정하는 것만으로 매우 간단하게 완료할 수 있습니다.
 
 **1단계: 데이터베이스 추가**
 새로운 FASTA 데이터베이스 파일을 `database/` 디렉토리 안의 전용 폴더에 배치합니다.
@@ -311,22 +313,22 @@ ANALYSES_TO_RUN = {
     ...
 }
 ```
-이제 모든 준비가 끝났습니다. 파이프라인을 실행하면 `StandardAnalysisHandler`가 이 새로운 요청을 자동으로 감지하여 처리합니다.
+이제 모든 준비가 끝났습니다. 파이프라인을 실행하면, 체인에 있는 다른 특별 핸들러가 요청을 처리하지 않는 한, `StandardAnalysisHandler`가 이 새로운 요청을 자동으로 감지하여 처리합니다.
 
 ---
 
 ## 10. 확장 가이드: 특별 분석 추가 (Expansion Guide: Special Analysis)
 
-"Chain of Responsibility" 패턴 덕분에, MLST와 PathogenFinder2와 같이 여러 단계의 복잡한 로직을 갖는 "특별" 분석을 추가하는 과정 또한 매우 체계적입니다.
+"Chain of Responsibility" 패턴 덕분에, MLST, AMR, PathogenFinder2와 같이 여러 단계의 복잡한 로직을 갖는 "특별" 분석을 추가하는 과정 또한 매우 체계적입니다.
 
-**PathogenFinder2Handler 예시:**
+**특별 핸들러 예시 (AMR, PathogenFinder2):**
 
-PathogenFinder2Handler는 표준 BLAST 분석과 다르게 다음과 같은 특징을 가집니다:
+`AMRHandler`나 `PathogenFinder2Handler`와 같은 특별 핸들러는 `StandardAnalysisHandler`가 처리하는 표준 분석과 다르게 다음과 같은 특징을 가집니다:
 
-- **다단계 워크플로우**: 의존성 확인 → 설정 → 실행 → 검증 → 정리의 단계를 거칩니다
-- **복잡한 의존성 관리**: `prodigal`, `protT5`, `diamond` 등 외부 도구를 관리합니다
-- **출력 검증**: 생성된 결과 파일의 유효성을 검증합니다
-- **에러 처리**: 각 단계에서 발생할 수 있는 오류를 체계적으로 처리합니다
+- **다단계 워크플로우**: 단순 BLAST 실행을 넘어, 결과를 파싱(`AMRHandler`)하거나 외부 도구 실행(`PathogenFinder2Handler`)과 같은 복합적인 단계를 포함합니다.
+- **복잡한 의존성 관리**: `pandas`(`AMRHandler`)나 `prodigal`, `diamond`(`PathogenFinder2Handler`) 등 추가적인 라이브러리나 외부 도구를 관리합니다.
+- **특화된 출력 생성**: 원시 BLAST 결과 외에, `amr_summary.json`(`AMRHandler`)과 같은 요약 파일을 생성합니다.
+- **에러 처리**: 각 단계에서 발생할 수 있는 오류를 보다 체계적으로 처리합니다.
 
 **1단계: `config.py`에 분석 정의**
 
@@ -336,7 +338,8 @@ PathogenFinder2Handler는 표준 BLAST 분석과 다르게 다음과 같은 특�
 # in src/config.py
 ANALYSES_TO_RUN = {
     "MLST_DB": "MLST",
-    "Pathogenfinder": "Pathogen_Finder2",  # PathogenFinder2 분석
+    "Pathogenfinder": "Pathogen_Finder2",
+    "resfinder_db": "Antimicrobial_Resistance",
     "serotype_db": "Serotyping", # <-- 새로운 특별 분석 추가
     ...
 }
@@ -373,23 +376,23 @@ class SerotypingHandler(AnalysisHandler):
 
             # Build the chain of responsibility
             standard_handler = StandardAnalysisHandler(context)
-            pathogen_handler = PathogenFinder2Handler(context) # <-- PathogenFinder2 핸들러
-            mlst_handler = MLSTHandler(context)
-            analysis_chain = mlst_handler
+            pathogen_handler = PathogenFinder2Handler(context)
+            amr_handler = AMRHandler(context)
+            analysis_chain = MLSTHandler(context)
 
-            # 체인 연결: MLST -> PathogenFinder2 -> Standard
-            analysis_chain.set_next(pathogen_handler).set_next(standard_handler)
+            # 체인 연결: MLST -> AMR -> PathogenFinder2 -> Standard
+            analysis_chain.set_next(amr_handler).set_next(pathogen_handler).set_next(standard_handler)
 ```
 
 **특별 분석 vs 표준 분석:**
 
-| 특징 | 표준 분석 (StandardAnalysisHandler) | 특별 분석 (PathogenFinder2Handler 등) |
+| 특징 | 표준 분석 (StandardAnalysisHandler) | 특별 분석 (MLST, AMR, PathogenFinder2 등) |
 |------|-----------------------------------|-----------------------------------|
-| **워크플로우** | 단일 BLAST 검색 | 다단계 복합 워크플로우 |
-| **의존성** | BLAST+만 필요 | 여러 외부 도구 필요 |
-| **출력 처리** | 단순 결과 저장 | 결과 검증 및 파싱 |
-| **에러 처리** | 기본 에러 처리 | 상세한 에러 처리 및 복구 |
-| **확장성** | 간단한 추가 | 복잡한 로직 구현 필요 |
+| **워크플로우** | 단일 BLAST 검색 | 다단계 복합 워크플로우 (e.g., BLAST + 결과 파싱, 외부 도구 실행) |
+| **의존성** | BLAST+만 필요 | BLAST+ 외 추가 라이브러리(e.g., pandas) 또는 외부 도구 필요 |
+| **출력 처리** | 원시 BLAST 결과(TSV) 저장 | JSON 요약, 커스텀 리포트 등 추가적인 결과물 생성 |
+| **에러 처리** | 기본 에러 처리 | 각 단계에 맞는 상세한 에러 처리 및 복구 로직 |
+| **확장성** | `config.py` 수정만으로 가능 | 전용 핸들러 클래스 구현 필요 |
 
 이 3단계를 통해, 파이프라인의 핵심 로직을 수정하지 않고도 새로운 특별 분석을 깨끗하고 모듈화된 방식으로 추가할 수 있습니다.
 
@@ -404,12 +407,12 @@ class SerotypingHandler(AnalysisHandler):
 ```python
 # in src/config.py
 ANALYSES_TO_RUN = {
-    # 특별 분석
+    # 특별 분석 (전용 핸들러 존재)
     "MLST_DB": "MLST",
     "Pathogenfinder": "Pathogen_Finder2",  # PathogenFinder2 활성화
-    
-    # 표준 분석
     "resfinder_db": "Antimicrobial_Resistance",
+
+    # 표준 분석 (StandardAnalysisHandler가 처리)
     "plasmidfinder_db": "Plasmid_Replicons",
     "mefinder_db": "Mobile_Genetic_Elements",
 }
