@@ -11,6 +11,7 @@ speeding up the pipeline.
 import asyncio
 from pathlib import Path
 from typing import Dict, Tuple
+import sys
 
 async def run_command_async(command: list) -> Tuple[bool, str, str]:
     """

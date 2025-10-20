@@ -9,6 +9,8 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
+import sys
+
 class Logger:
     """
     A simple logger to save step-by-step debug information into discrete files.

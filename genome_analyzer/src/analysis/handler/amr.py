@@ -4,51 +4,32 @@ import pandas as pd
 from pathlib import Path
 
 from .base import AnalysisHandler
-from analysis import blast_runner
+from analysis import utils
 
 class AMRHandler(AnalysisHandler):
     """
     A concrete handler for Antimicrobial Resistance (AMR) analysis, mimicking ABRicate.
     """
-    async def handle(self, analysis_name: str, db_folder: str, params: dict) -> asyncio.Task | None:
-        if analysis_name == "Antimicrobial_Resistance":
-            return asyncio.create_task(self._run_amr_workflow(db_folder, analysis_name))
-        else:
-            return await super().handle(analysis_name, db_folder, params)
-
-    async def _run_amr_workflow(self, db_folder: str, analysis_name: str):
-        """
-        Runs the AMR analysis workflow.
-        """
-        self._context.logger.log_step(analysis_name, "1_Start_AMR_Workflow", "AMR workflow initiated.")
+    async def execute(self):
+        self.logger.log_step(self.analysis_name, "1_Start_AMR_Workflow", "AMR workflow initiated.")
         
-        output_dir = self._context.results_dir / analysis_name
-        output_dir.mkdir(exist_ok=True)
+        output_dir = Path(self.outputs.get("summary_json")).parent
+        output_dir.mkdir(exist_ok=True) # Ensure output dir exists
 
-        # Step 1: Run BLAST search
-        query_dir = Path.cwd() / "database" / db_folder
-        query_files = list(query_dir.rglob("*.f*a"))
-        if not query_files:
-            self._context.logger.log_step(analysis_name, "2_No_Fasta_Found", f"No FASTA files found in '{query_dir}', skipping.", extension="log")
-            return
-
+        query_dir = Path(self.inputs.get("amr_db_folder"))
+        
         combined_query = output_dir / "combined_query.fasta"
-        with open(combined_query, "w") as f_out:
-            for f in query_files:
-                f_out.write(f.read_text())
+        if not utils.combine_fasta_files(query_dir, combined_query, self.logger, self.analysis_name):
+            return
                 
-        blast_results_path = output_dir / "blast_results.tsv"
+        blast_results_path = output_dir / "blast_results.tsv" # This is an intermediate file now
         blast_options = {
             "perc_identity": 95, 
             "qcov_hsp_perc": 95, 
             "outfmt": "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qcovhsp"
         }
-        await blast_runner.run_blastn_async(combined_query, self._context.genome_db_path, blast_results_path, blast_options)
-        
-        with open(blast_results_path, "r") as f:
-            self._context.logger.log_step(analysis_name, "3_Blast_Results", f"BLAST search results for {analysis_name}:\n{f.read()}", extension="tsv")
+        await self._run_blast(combined_query, blast_results_path, blast_options)
 
-        # Step 2: Parse and filter BLAST results
         try:
             df = pd.read_csv(blast_results_path, sep='\t', names=['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore', 'qcovhsp'])
         except (pd.errors.EmptyDataError, FileNotFoundError):
@@ -56,12 +37,13 @@ class AMRHandler(AnalysisHandler):
 
         summary_records = []
         if not df.empty:
+            # ... (parsing logic remains the same)
             best_hits = df.loc[df.groupby('qseqid')['bitscore'].idxmax()]
 
             for _, row in best_hits.iterrows():
                 parts = row['qseqid'].split('_')
                 gene = parts[0]
-                database = db_folder
+                database = self.inputs.get("amr_db_folder")
                 accession = parts[2] if len(parts) > 2 else 'N/A'
                 product = "N/A"
 
@@ -75,11 +57,9 @@ class AMRHandler(AnalysisHandler):
                     "PRODUCT": product
                 })
 
-        # Step 3: Save summary and store results
-        self._context.results_data['amr'] = summary_records
+        # The main output is the summary JSON
+        self.context['results_data']['amr'] = summary_records # Store in context
         
-        json_output_path = output_dir / "amr_summary.json"
-        with open(json_output_path, "w") as f:
-            json.dump(summary_records, f, indent=4)
+        self._write_output("summary_json", summary_records, write_type="json")
 
-        self._context.logger.log_step(analysis_name, "4_End_AMR_Workflow", f"AMR workflow completed. Found {len(summary_records)} genes.")
+        self.logger.log_step(self.analysis_name, "4_End_AMR_Workflow", f"AMR workflow completed. Found {len(summary_records)} genes.")

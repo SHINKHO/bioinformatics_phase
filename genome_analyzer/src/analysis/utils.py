@@ -137,3 +137,26 @@ def get_genome_name(genome_file: Path) -> str:
         return first_record.id
     except StopIteration:
         raise ValueError(f"FASTA file '{genome_file}' is empty or not in a valid format.")
+
+def combine_fasta_files(input_dir: Path, output_file: Path, logger: Logger, analysis_name: str) -> bool:
+    """
+    Combines all FASTA files in a directory into a single file.
+
+    Args:
+        input_dir (Path): The directory containing FASTA files.
+        output_file (Path): The path to the combined output file.
+        logger (Logger): The logger to use for logging.
+        analysis_name (str): The name of the analysis for logging purposes.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    query_files = list(input_dir.rglob("*.f*a"))
+    if not query_files:
+        logger.log_step(analysis_name, "2_No_Fasta_Found", f"No FASTA files found in '{input_dir}', skipping.", extension="log")
+        return False
+
+    with open(output_file, "w") as f_out:
+        for f in query_files:
+            f_out.write(f.read_text())
+    return True

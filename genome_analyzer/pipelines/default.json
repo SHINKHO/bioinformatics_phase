@@ -1,0 +1,68 @@
+{
+  "pipeline_name": "Standard Bacterial ME Analysis",
+  "steps": [
+    {
+      "name": "MLST_Analysis",
+      "enabled": true,
+      "module": "analysis.handler.mlst.MLSTHandler",
+      "inputs": {
+        "genome_file": "{context.initial_genome_file}",
+        "species_db": "{context.database_root}/MLST_DB/{context.species}"
+      },
+      "outputs": {
+        "results_json": "{context.results_dir}/MLST/mlst_results.json",
+        "novel_alleles": "{context.results_dir}/MLST/novel_alleles.fasta"
+      },
+      "parameters": {}
+    },
+    {
+      "name": "AMR_Analysis",
+      "enabled": true,
+      "module": "analysis.handler.amr.AMRHandler",
+      "inputs": {
+        "genome_db": "{context.genome_db_path}",
+        "amr_db_folder": "{context.database_root}/resfinder_db"
+      },
+      "outputs": {
+        "summary_json": "{context.results_dir}/Antimicrobial_Resistance/amr_summary.json"
+      },
+      "parameters": {
+        "analysis_name": "Antimicrobial_Resistance"
+      }
+    },
+    {
+      "name": "Plasmid_Analysis",
+      "enabled": true,
+      "module": "analysis.handler.standard.StandardAnalysisHandler",
+      "inputs": {
+        "genome_db": "{context.genome_db_path}",
+        "db_folder": "{context.database_root}/plasmidfinder_db"
+      },
+      "outputs": {
+        "blast_results": "{context.results_dir}/Plasmid_Replicons/blast_results.tsv"
+      },
+      "parameters": {
+        "analysis_name": "Plasmid_Replicons",
+        "blast_options": {
+          "perc_identity": 80,
+          "qcov_hsp_perc": 80
+        }
+      }
+    },
+    {
+      "name": "MGE_Analysis",
+      "enabled": true,
+      "module": "analysis.handler.standard.StandardAnalysisHandler",
+      "inputs": {
+        "genome_db": "{context.genome_db_path}",
+        "db_folder": "{context.database_root}/MEFinder"
+      },
+      "outputs": {
+        "blast_results": "{context.results_dir}/Mobile_Genetic_Elements/blast_results.tsv"
+      },
+      "parameters": {
+        "analysis_name": "Mobile_Genetic_Elements"
+      }
+    }
+  ]
+}
