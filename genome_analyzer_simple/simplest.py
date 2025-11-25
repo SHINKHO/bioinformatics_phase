@@ -34,7 +34,7 @@ async def main():
     parser.add_argument("-s", "--species", required=True, help="Target species for MLST")
     parser.add_argument("-o", "--output", type=Path, default=Path("analysis_results"), help="Output directory")
     parser.add_argument("--db", type=Path, default=Path("database"), help="Database root directory")
-    parser.add_argument("--audit-mode", action="store_true", help="중간 산출물 보존")
+    parser.add_argument("--audit-mode", action="store_true", help="debugging : 중간 산출물 보존")
     args = parser.parse_args()
 
     # 2. 필수 도구 확인
@@ -439,14 +439,14 @@ def write_structured_report(path: Path, data: Dict[str, Any]):
         return [f"{h['Gene']} ({h['Identity']:.2f}%)" for h in hits] if hits else ["None"]
 
     with open(path, 'w') as f:
-        f.write("== 분석 보고서 ==\n\n")
+        f.write("== Analysis Report ==\n\n")
 
-        f.write(f"유전체 ID: {data['genome_id']}\n")
+        f.write(f"Genome ID: {data['genome_id']}\n")
 
         species = data.get('species_rpoB', {}).get('species', 'Unknown')
-        f.write(f"종 (rpoB 기반): {species}\n\n")
+        f.write(f"Species (rpoB-based): {species}\n\n")
 
-        f.write("-- 분자 역학 정보 --\n")
+        f.write("-- Molecular Epidemiology --\n")
         mlst_info = data.get('mlst', {})
         st = mlst_info.get('st', 'Unknown')
         f.write(f"  MLST: {st}\n")
@@ -457,29 +457,29 @@ def write_structured_report(path: Path, data: Dict[str, Any]):
         else:
             f.write("\n")
 
-        f.write("-- 항균제 내성 --\n")
+        f.write("-- Antimicrobial Resistance --\n")
         amr_genes = format_hits(data.get('amr', []))
-        f.write("  획득 내성 유전자:\n")
+        f.write("  Acquired Resistance Genes:\n")
         for gene in amr_genes:
             f.write(f"    - {gene}\n")
-        f.write("  점돌연변이 (SNP):\n    - 없음\n\n")
+        f.write("  Point Mutations (SNPs):\n    - None\n\n")
 
-        f.write("-- 독성 인자 --\n")
+        f.write("-- Virulence Factors --\n")
         vir_genes = format_hits(data.get('virulence', []))
         for gene in vir_genes:
             f.write(f"  - {gene}\n")
         if not vir_genes or vir_genes[0] == "None":
-            f.write("  발견되지 않음\n")
+            f.write("  Not Detected\n")
         f.write("\n")
 
-        f.write("-- 이동성 유전 인자 --\n")
+        f.write("-- Mobile Genetic Elements --\n")
         plasmids = format_hits(data.get('plasmid', []))
-        f.write("  플라스미드:\n")
+        f.write("  Plasmids:\n")
         for plasmid in plasmids:
             f.write(f"    - {plasmid}\n")
 
         mges = format_hits(data.get('mge', []))
-        f.write("  기타 이동성 유전 인자:\n")
+        f.write("  Other Mobile Genetic Elements:\n")
         for mge in mges:
             f.write(f"    - {mge}\n")
 
