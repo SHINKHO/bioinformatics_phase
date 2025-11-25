@@ -6,24 +6,11 @@ from dataclasses import dataclass
 
 from logger import Logger
 
-# --- Data Context ---
+# --- 데이터 컨텍스트 ---
 
 @dataclass
 class AnalysisContext:
-    """
-    A data class to hold shared data, tools, and configurations needed by all handlers.
-    This avoids passing many individual arguments through the handler chain.
-    
-    Attributes:
-        genome_db_path (Path): The file path to the BLAST database of the input genome.
-        results_dir (Path): The main directory where final results are stored.
-        temp_dir (Path): A directory for intermediate files.
-        logger (Logger): The instance of the logger for detailed step-logging.
-        verbose (bool): Flag to enable verbose console output.
-        results_data (dict): A dictionary to store the final results from all analyses.
-        genome_id (str): The genome identifier extracted from folder structure.
-        species (str): The species name extracted from folder structure.
-    """
+    # 모든 핸들러가 공유하는 데이터, 도구, 설정을 담는 데이터 클래스.
     genome_db_path: Path
     results_dir: Path
     temp_dir: Path
@@ -33,56 +20,22 @@ class AnalysisContext:
     genome_id: str
     species: str
 
-# --- Handler ABC ---
+# --- 핸들러 ABC ---
 
 class AnalysisHandler(ABC):
-    """
-    Abstract Base Class for all analysis handlers.
-    
-    This class defines the common interface for all handlers in the chain of
-    responsibility. It includes methods to link handlers together (`set_next`)
-    and to process an analysis request (`handle`).
-    
-    Attributes:
-        _next_handler (AnalysisHandler | None): The next handler in the chain.
-        _context (AnalysisContext): Shared data and tools.
-    """
+    # 모든 분석 핸들러의 추상 기본 클래스 (ABC).
     def __init__(self, context: AnalysisContext):
         self._next_handler: AnalysisHandler | None = None
         self._context = context
 
     def set_next(self, handler: 'AnalysisHandler') -> 'AnalysisHandler':
-        """
-        Links this handler to the next one in the chain.
-        
-        This allows chaining multiple handlers together. E.g., chain.set_next(handler1).set_next(handler2).
-        
-        Args:
-            handler (AnalysisHandler): The next handler object to link to.
-            
-        Returns:
-            AnalysisHandler: The next handler, to allow for fluent chaining.
-        """
+        # 핸들러를 체인의 다음 핸들러와 연결. In: handler(AnalysisHandler) / Out: handler(AnalysisHandler)
         self._next_handler = handler
         return handler
 
     @abstractmethod
     async def handle(self, analysis_name: str, db_folder: str, params: dict) -> asyncio.Task | None:
-        """
-        Handles an analysis request.
-        
-        If the handler can process this `analysis_name`, it does so and returns
-        an asyncio.Task. Otherwise, it passes the request to the next handler
-        in the chain.
-        
-        Args:
-            analysis_name (str): The name of the analysis to perform (e.g., "MLST").
-            db_folder (str): The name of the database folder for this analysis.
-            params (dict): A dictionary of parameters specific to this analysis.
-            
-        Returns:
-            asyncio.Task | None: A task for the running analysis, or None if not handled.
-        """
+        # 분석 요청 처리. In: analysis_name(str), db_folder(str), params(dict) / Out: asyncio.Task 또는 None
         if self._next_handler:
             return await self._next_handler.handle(analysis_name, db_folder, params)
         return None

@@ -12,17 +12,10 @@ from config import DATABASE_ROOT
 import json
 
 class MLSTHandler(AnalysisHandler):
-    """
-    A concrete handler for the special multi-step MLST workflow.
-    
-    This handler checks if the requested analysis is "MLST". If so, it executes
-    the complex MLST logic. Otherwise, it passes the request to the next handler.
-    """
+    # 다중 단계 MLST 워크플로우를 처리하는 핸들러.
     async def handle(self, analysis_name: str, db_folder: str, params: dict) -> asyncio.Task | None:
-        # Step 1: Check if this handler is responsible for the analysis.
+        # "MLST" 분석 요청을 처리. In: analysis_name(str), db_folder(str), params(dict) / Out: asyncio.Task 또는 None
         if analysis_name == "MLST":
-            # Step 2: If responsible, create and return a task for the specific workflow.
-            # Use species from context instead of parameters
             mlst_params = {
                 'species': self._context.species,
                 'gene_dir': DATABASE_ROOT / "MLST_DB" / self._context.species,
@@ -32,24 +25,17 @@ class MLSTHandler(AnalysisHandler):
             }
             return asyncio.create_task(self._run_mlst_workflow(mlst_params))
         else:
-            # Step 3: If not responsible, pass the request to the next handler in the chain.
             return await super().handle(analysis_name, db_folder, params)
 
     def _get_loci_order_from_profile(self) -> List[str]:
-        """
-        Extract loci order from the species profile file.
-        
-        Returns:
-            List[str]: List of loci in the order they appear in the profile file.
-        """
+        # 프로파일 파일에서 유전자 좌위(loci) 순서를 추출. In: None / Out: Loci 리스트(List[str])
         profile_file = DATABASE_ROOT / "MLST_DB" / self._context.species / f"{self._context.species}.txt"
         try:
             with open(profile_file, 'r') as f:
-                # Header line contains the loci order (first line)
                 lines = f.readlines()
                 if len(lines) > 0:
                     loci_line = lines[0].strip()
-                    return loci_line.split('\t')[1:]  # Skip first column (ST)
+                    return loci_line.split('\t')[1:]
                 else:
                     self._context.logger.log_step("MLST", "Profile_Error", "Profile file is empty.")
                     return []
@@ -61,6 +47,7 @@ class MLSTHandler(AnalysisHandler):
             return []
 
     async def _run_mlst_workflow(self, mlst_params: dict):
+        # MLST 분석 워크플로우 실행. In: mlst_params(dict) / Out: None
         self._context.logger.log_step("MLST", "1_Start_MLST_Workflow", "MLST workflow initiated.")
         output_dir = self._context.results_dir / "MLST"
         output_dir.mkdir(exist_ok=True)
@@ -70,7 +57,7 @@ class MLSTHandler(AnalysisHandler):
         profile_file = mlst_params['profile_file']
         
         housekeeping_blast_options = {"perc_identity": 90}
-        allele_blast_options = {} # Use defaults from blast_runner
+        allele_blast_options = {}
 
         extracted_genes_path = await self._extract_housekeeping_genes(gene_dir, loci_order, housekeeping_blast_options)
         
@@ -93,6 +80,7 @@ class MLSTHandler(AnalysisHandler):
         self._context.logger.log_step("MLST", "6_End_MLST_Workflow", f"MLST workflow completed. Found ST: {st}, Profile: {profile}")
 
     async def _extract_housekeeping_genes(self, gene_dir, loci_order, blast_options):
+        # 하우스키핑 유전자를 게놈에서 추출. In: gene_dir(Path), loci_order(list), blast_options(dict) / Out: 추출된 유전자 fasta 경로(Path)
         probes_fasta = self._context.temp_dir / "mlst_probes.fasta"
         with open(probes_fasta, "w") as f_out:
             for locus in loci_order:
@@ -135,6 +123,7 @@ class MLSTHandler(AnalysisHandler):
         return extracted_genes_path
 
     async def _determine_allele_profile(self, extracted_genes_path, gene_dir, loci_order, blast_options):
+        # 추출된 유전자의 대립유전자(allele) 프로파일 결정. In: extracted_genes_path(Path), gene_dir(Path), loci_order(list), blast_options(dict) / Out: 프로파일(dict)
         combined_alleles = self._context.temp_dir / "all_alleles.fasta"
         with open(combined_alleles, "w") as f_out:
             for locus_file in gene_dir.glob("*.tfa"):
@@ -187,6 +176,7 @@ class MLSTHandler(AnalysisHandler):
         return profile
 
     def _find_sequence_type(self, profile, profile_file):
+        # 프로파일에 해당하는 ST(Sequence Type)를 찾음. In: profile(dict), profile_file(Path) / Out: ST(str)
         profile_df = pd.read_csv(profile_file, sep='\t').astype(str)
         st = "Novel Profile"
         for _, row in profile_df.iterrows():

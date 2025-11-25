@@ -1,42 +1,25 @@
-"""
-Central Configuration for the Pipeline
-
-This module centralizes all the main configuration variables for the project.
-This includes file paths, directory names, and the crucial dictionary that
-defines which analyses to run.
-"""
+# 파이프라인 중앙 설정.
 from pathlib import Path
 
-# --- Project Root ---
-# Defines the root directory of the project. `Path.cwd()` assumes the
-# script is run from the project's root directory.
+# 프로젝트 루트 디렉토리.
 PROJECT_ROOT = Path.cwd()
 
-# --- Main Directories ---
-# Defines the primary data and result directories, relative to the project root.
+# 주요 데이터 및 결과 디렉토리.
 DATABASE_ROOT = PROJECT_ROOT / "database"
 DEFAULT_RESULTS_DIR = PROJECT_ROOT / "analysis_results"
 
-# --- BLAST Database Directory ---
-# This directory is used to store the pre-formatted BLAST databases created
-# from the input genomes. This avoids re-creating the database on every run
-# for the same genome.
+# 입력 게놈으로 생성된 BLAST 데이터베이스 저장 디렉토리.
 BLAST_DB_DIR = PROJECT_ROOT / "blast_db_output"
 BLAST_DB_DIR.mkdir(exist_ok=True)
 
-# --- Analyses to Run ---
-# This dictionary is the main control center for the pipeline.
-# It maps the name of a database folder (within `database/`) to the
-# desired analysis name that will be used for output folders and reports.
-#
-# To add a new standard analysis, simply add its database folder and desired
-# name here. To add a special analysis, you must also create a handler for it
-# (see `analysis/handler`).
+# 실행할 분석 목록을 정의하는 메인 컨트롤 딕셔너리.
+# Key: database/ 내의 DB 폴더 이름
+# Value: 출력 폴더 및 보고서에 사용될 분석 이름
 ANALYSES_TO_RUN = {
-    # Special analysis (handled by MLSTHandler)
+    # 특별 분석 (MLSTHandler가 처리)
     "MLST_DB": "MLST",
     # "Pathogenfinder": "Pathogen_Finder2",
-    # Standard analyses (handled by StandardAnalysisHandler)
+    # 표준 분석 (StandardAnalysisHandler가 처리)
     "resfinder_db": "Antimicrobial_Resistance",
     "plasmidfinder_db": "Plasmid_Replicons",
     "mefinder_db": "Mobile_Genetic_Elements",

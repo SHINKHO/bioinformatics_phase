@@ -100,8 +100,35 @@ Thumbs.db
 .idea/
 *.sublime-project
 *.sublime-workspace
-g
+
 # 3. Miscellaneous
 # Any local configuration files that shouldn't be shared.
 config.ini
 local_settings.py
+
+# --- Custom Project Ignores ---
+# Ignore generated files and data directories for specific tools to keep the repository clean.
+
+# Tool-specific generated data
+/genome_analyzer/database/
+/genome_analyzer/genome/
+/genome_analyzer/analysis_results/
+/genome_analyzer_simple/database/
+/genome_analyzer_simple/genome/
+/genome_analyzer_simple/analysis_results/
+
+# Server and testing directories
+/server/Req-System-Shell-Script/
+/webtest/
+/db.sqlite3 # Ignore the main sqlite db
+
+# BLAST DB files
+/blast_db_output/
+*.nin
+*.nhr
+*.nsq
+*.ndb
+
+# Editor temporary files
+*.~lock.*#
+*.odg#
