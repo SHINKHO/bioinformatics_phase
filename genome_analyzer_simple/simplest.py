@@ -462,7 +462,7 @@ def write_structured_report(path: Path, data: Dict[str, Any]):
         f.write("  Acquired Resistance Genes:\n")
         for gene in amr_genes:
             f.write(f"    - {gene}\n")
-        f.write("  Point Mutations (SNPs):\n    - None\n\n")
+
 
         f.write("-- Virulence Factors --\n")
         vir_genes = format_hits(data.get('virulence', []))
