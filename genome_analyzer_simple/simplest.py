@@ -56,20 +56,39 @@ async def main():
         genome_db_prefix = temp_dir / genome_id
         await make_blast_db(args.genome, genome_db_prefix)
 
+        # 5. 균종동정 : rpoB 처리하여 결과값을 받아 분기 처리합니다
+        rpoB_result = {}  
+        rpoB_script = find_script_smart(args.db, "identify_from_genome.py", "rpoB_db")
+        
+        if rpoB_script:
+            rpoB_db_dir = rpoB_script.parent / "db"
+            if not rpoB_db_dir.exists():
+                rpoB_db_dir = args.db
+            rpoB_result = await task_rpoB_wrapper(rpoB_script, args.genome, rpoB_db_dir, res_dir)
+        else:
+            print("[ERROR] rpoB script not found. failed species identification.")
+            sys.exit(0)
+        
+        # rpoB 결과가 Unknown이면 종료
+        if rpoB_result.get("species", "Unknown") == "Unknown":
+            print("[WARN] rpoB Process. failed species identification. Aborting.")
+            sys.exit(0)
+
         # 5. 분석 작업 생성: 모든 분석을 비동기 태스크로 만듭니다.
         tasks = _create_analysis_tasks(args, genome_db_prefix, res_dir, temp_dir)
+
         # 6. 모든 분석 동시 실행
         results = await asyncio.gather(*tasks)
 
         # 7. 결과 취합
         data_collection = {
             "genome_id": genome_id,
-            "species_rpoB": results[0],
-            "mlst": results[1],
-            "amr": results[2],
-            "plasmid": results[3],
-            "virulence": results[4],
-            "mge": results[5],
+            "species_rpoB": rpoB_result,
+            "mlst": results[0],
+            "amr": results[1],
+            "plasmid": results[2],
+            "virulence": results[3],
+            "mge": results[4],
         }
 
         # 8. 최종 보고서 작성
@@ -103,21 +122,10 @@ def _create_analysis_tasks(args: argparse.Namespace, genome_db_prefix: Path, res
     """모든 분석에 대한 비동기 태스크 리스트를 생성합니다."""
     tasks = []
 
-    # 작업 1: rpoB (종 동정)
-    rpoB_script = find_script_smart(args.db, "identify_from_genome.py", "rpoB_db")
-    if rpoB_script:
-        rpoB_db_dir = rpoB_script.parent / "db"
-        if not rpoB_db_dir.exists():
-            rpoB_db_dir = args.db
-        tasks.append(task_rpoB_wrapper(rpoB_script, args.genome, rpoB_db_dir, res_dir))
-    else:
-        print("[WARN] rpoB script not found. Skipping species identification.")
-        tasks.append(asyncio.create_task(asyncio.sleep(0, result={})))
-
-    # 작업 2: MLST
+    # 작업 1: MLST
     tasks.append(task_mlst(args.species, genome_db_prefix, args.db, res_dir, temp_dir))
 
-    # 작업 3: 유전자 특성 검색 (AMR, Plasmid 등)
+    # 작업 2 ~: 유전자 특성 검색 (AMR, Plasmid 등)
     feature_searches = [
         ("Antimicrobial_Resistance", "resfinder_db"),
         ("Plasmid_Replicons", "plasmidfinder_db"),
